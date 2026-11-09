@@ -6,11 +6,14 @@ import {
 } from '@angular/ssr/node';
 import express from 'express';
 import { join } from 'node:path';
+import { VertexAI } from '@google-cloud/vertexai';
+import { GoogleAuth } from 'google-auth-library';
 
 const browserDistFolder = join(import.meta.dirname, '../browser');
 
 const app = express();
 const angularApp = new AngularNodeAppEngine();
+const auth = new GoogleAuth();
 
 /**
  * Example Express Rest API endpoints can be defined here.
@@ -23,6 +26,23 @@ const angularApp = new AngularNodeAppEngine();
  * });
  * ```
  */
+app.get('/api/facts', async (req, res) => {
+  const project = await auth.getProjectId();
+  const vertex = new VertexAI({ project });
+  const generativeModel = vertex.getGenerativeModel({
+    model: 'gemini-1.5-flash',
+    generationConfig: { responseMimeType: 'application/json' },
+  });
+
+  const animal = String(req.query['animal'] ?? 'dog');
+  const prompt = `Give me 10 fun facts about ${animal}.
+                  Return as json as an array in the format ['fact 1', 'fact 2']
+                  Remove backticks and other markdown formatting.`;
+
+  const resp = await generativeModel.generateContent(prompt);
+  const text = resp.response.candidates?.[0]?.content.parts[0]?.text ?? '[]';
+  res.json(JSON.parse(text));
+});
 
 /**
  * Serve static files from /browser
